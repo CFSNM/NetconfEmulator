@@ -11,9 +11,17 @@ if sys.argv[1] is None:
     print("The startup config is missing")
     exit(1)
 
+if sys.argv[2] is None:
+    print("The datastores dependencies are missing")
+    exit(1)
+
 bindings_files_folder = getcwd()+"/bindings"
 
 cfg = sys.argv[1]
+dependencies = sys.argv[2].replace("\n", " ").split(" ")
+print(dependencies)
+module = dependencies[0].replace(".yang", "")
+print(module)
 database = cfg.replace(".xml", "")
 
 bindings_folder_list = listdir(bindings_files_folder)
@@ -34,24 +42,24 @@ db = dbclient.netconf
 print(database)
 
 print("Parsing data from the xml provided")
-with open(database, 'r') as database_reader:
+with open(cfg, 'r+') as database_reader:
     data = database_reader.read().replace('\n', '')
 
-print(data)
-database_data = serialise.pybindIETFXMLDecoder.decode(data, binding, database)
-print(database_data)
+database_data = serialise.pybindIETFXMLDecoder.decode(data, binding, module)
 database_string = pybindJSON.dumps(database_data, mode="ietf")
-print(database_string)
 
 startup_json = json.loads(database_string)
 startup_json["_id"] = "startup"
+startup_json["module"] = module
 candidate_json = json.loads(database_string)
 candidate_json["_id"] = "candidate"
+candidate_json["module"] = module
 running_json = json.loads(database_string)
 running_json["_id"] = "running"
+running_json["module"] = module
 
 print("Inserting files into database")
-collection = getattr(db, database_name)
+collection = getattr(db, database)
 result_startup = collection.insert_one(startup_json)
 result_candidate = collection.insert_one(candidate_json)
 result_running = collection.insert_one(running_json)

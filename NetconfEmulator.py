@@ -176,6 +176,15 @@ class NetconfEmulator(object):
     def rpc_commit(self, session, rpc, *unused):
         logging.info("Received commit rpc: " + etree.tostring(rpc, pretty_print=True))
 
+    def rpc_copy_config(self, session, rpc, *unused):
+        logging.info("Received copy-config rpc: " + etree.tostring(rpc, pretty_print=True))
+
+    def rpc_delete_config(self, session, rpc, *unused):
+        logging.info("Received delete-config rpc: " + etree.tostring(rpc, pretty_print=True))
+
+    def rpc_discard_changes(self, session, rpc, *unused):
+        logging.info("Received discard-changes rpc: " + etree.tostring(rpc, pretty_print=True))
+
 
     def rpc_get(self, session, rpc, filter_or_none):  # pylint: disable=W0613
         logging.info("Received get rpc: "+etree.tostring(rpc, pretty_print=True))
@@ -203,7 +212,7 @@ class NetconfEmulator(object):
             xml_response = data_elm
 
         else:
-            # Parsing the database name form the rpc tag namespace
+            # Parsing the database name from the rpc tag namespace
             db_base = rpc[0][1][0].tag.split('}')[0].split('/')[-1]
             db_source = rpc[0][1][0].tag.split('/')[2].split('.')[0]
             db_name = db_source + "-" + db_base
@@ -212,7 +221,6 @@ class NetconfEmulator(object):
             # Finding the datastore requested
             db = dbclient.netconf
             names = db.list_collection_names()
-            # logging.info(names)
 
             if db_name in names:
 
@@ -333,7 +341,7 @@ class NetconfEmulator(object):
         data_to_insert_xml = etree.fromstring(etree.tostring(rpc[0][1]))
 
         for collection_name in db.list_collection_names():
-            if self.used_model in collection_name:
+            if self.used_profile in collection_name:
                  collection = getattr(db, collection_name)
                  running_config = collection.find_one({"_id": datastore_to_insert})
                  del running_config["_id"]

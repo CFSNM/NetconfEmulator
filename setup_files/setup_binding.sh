@@ -1,6 +1,6 @@
 if [ "$#" -ne "2" ]; then
   	echo "You need to include two parameters:"
-  	echo "1) A file with the datastores."
+  	echo "1) A file with the datastores (The main datastores model has to be the first)."
   	echo "2) A xml file with the startup config (its name will be used to create the mongo collection)."
   	exit 1
 fi
@@ -15,4 +15,4 @@ pyang --plugindir $PYBINDPLUGIN -f pybind -o $filename $dependencies
 cp $filename bindings/
 cp $filename ../bindings/
 rm $filename
-python setup_db.py "$config"
+python setup_db.py "$config" "$dependencies"
