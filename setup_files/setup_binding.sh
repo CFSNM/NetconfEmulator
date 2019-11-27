@@ -1,7 +1,7 @@
 if [ "$#" -ne "2" ]; then
-  	echo "You need to include three parameters:\n\r"
-  	echo "1) A file with the datastores\n\r"
-  	echo "2) A file with the startup config (its name will be used to create the mongo collection)\n\r"
+  	echo "You need to include two parameters:"
+  	echo "1) A file with the datastores."
+  	echo "2) A xml file with the startup config (its name will be used to create the mongo collection)."
   	exit 1
 fi
 dependencies="$(cat $1)"

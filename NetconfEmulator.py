@@ -138,7 +138,7 @@ class NetconfEmulator(object):
         self.used_profile = binding_file_fixed.split("_")[1]
         self.binding = locate('bindings.' + binding_file_fixed)
 
-        logging.info("Used profile: "+self.used_model)
+        logging.info("Used profile: "+self.used_profile)
 
 
     def close(self):
@@ -152,7 +152,7 @@ class NetconfEmulator(object):
 
 
     def rpc_available_profiles(self, session, rpc, *unused):
-        logging.info("Received available-models rpc: " + etree.tostring(rpc, pretty_print=True))
+        logging.info("Received available-profiles rpc: " + etree.tostring(rpc, pretty_print=True))
         response = etree.Element("available-models")
 
         bindings_files_folder = getcwd() + "/bindings"
@@ -160,8 +160,7 @@ class NetconfEmulator(object):
         i = 0
         for bind_file in bindings_folder_list:
             if "binding_" in bind_file and '.py' in bind_file and '.pyc' not in bind_file:
-                binding_file = bind_file
-                binding_file_fixed = binding_file.replace(".py", "")
+                binding_file_fixed = bind_file.replace(".py", "")
                 model = str(binding_file_fixed.split("_")[1]) + ".yang"
                 model_element = etree.Element("available-model")
                 model_element.text = model
