@@ -1,0 +1,9 @@
+setup_files/*.xml
+setup_files/*.yang
+setup_files/*.txt
+.idea
+.*pyc
+bindings/.*pyc
+
+
+
