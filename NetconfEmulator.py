@@ -158,11 +158,13 @@ class NetconfEmulator(object):
         bindings_files_folder = getcwd() + "/bindings"
         bindings_folder_list = listdir(bindings_files_folder)
         i = 0
+        j = 0
         for bind_file in bindings_folder_list:
             if "binding_" in bind_file and '.py' in bind_file and '.pyc' not in bind_file:
                 binding_file_fixed = bind_file.replace(".py", "")
-                model = str(binding_file_fixed.split("_")[1]) + ".yang"
+                model = str(binding_file_fixed.split("-")[1]) + ".yang"
                 model_element = etree.Element("available-model")
+
                 model_element.text = model
                 response.insert(i, model_element)
                 i += 1
@@ -170,8 +172,8 @@ class NetconfEmulator(object):
 
         return response
 
-    def rpc_change_model(self, session, rpc, *unused):
-        logging.info("Received change-model rpc: "+etree.tostring(rpc, pretty_print=True))
+    def rpc_change_profile(self, session, rpc, *unused):
+        logging.info("Received change-profile rpc: "+etree.tostring(rpc, pretty_print=True))
 
     def rpc_commit(self, session, rpc, *unused):
         logging.info("Received commit rpc: " + etree.tostring(rpc, pretty_print=True))
@@ -189,144 +191,111 @@ class NetconfEmulator(object):
     def rpc_get(self, session, rpc, filter_or_none):  # pylint: disable=W0613
         logging.info("Received get rpc: "+etree.tostring(rpc, pretty_print=True))
         dbclient = MongoClient()
+        data_elm = etree.Element('data', nsmap={None: 'urn:ietf:params:xml:ns:netconf:base:1.0'})
         if rpc[0].find('{*}filter') is None:
-            # All configuration files should be appended
-            data_elm = etree.Element('data', nsmap={None: 'urn:ietf:params:xml:ns:netconf:base:1.0'})
-            i = 1
-            db = dbclient.netconf
-            logging.info(db.list_collections())
-            for collection_name in db.list_collection_names():
-                collection = getattr(db, collection_name)
-                collection_data = collection.find_one({"_id": "running"})
-                collection_data_1 = dict(collection_data)
-                for element in collection_data:
-                    if "id" in element:
-                        del collection_data_1[element]
-                collection_data = collection_data_1
 
-                collection_binding = pybindJSONDecoder.load_ietf_json(collection_data, self.binding, collection_name)
-                xml_data_string = serialise.pybindIETFXMLEncoder.serialise(collection_binding)
-                xml_data = etree.XML(xml_data_string)
-                data_elm.insert(i, xml_data)
-                i += 1
-            xml_response = data_elm
+            db = dbclient.netconf
+            for collection_name in db.list_collection_names():
+                if self.used_profile in collection_name:
+                    collection = getattr(db, collection_name)
+                    collection_data = collection.find_one({"_id": "running"})
+                    modules = list(collection_data["modules"])
+                    collection_data_1 = dict(collection_data)
+                    for element in collection_data:
+                        if "id" in element or "modules" in element:
+                            del collection_data_1[element]
+                    collection_data = collection_data_1
+
+                    collection_binding = pybindJSONDecoder.load_ietf_json(collection_data, self.binding, modules[0])
+                    xml_data_string = serialise.pybindIETFXMLEncoder.serialise(collection_binding)
+                    xml_data = etree.XML(xml_data_string)
+                    data_elm.insert(1, xml_data)
 
         else:
-            # Parsing the database name from the rpc tag namespace
-            db_base = rpc[0][1][0].tag.split('}')[0].split('/')[-1]
-            db_source = rpc[0][1][0].tag.split('/')[2].split('.')[0]
-            db_name = db_source + "-" + db_base
-            # logging.info(db_name)
 
-            # Finding the datastore requested
             db = dbclient.netconf
-            names = db.list_collection_names()
+            for collection_name in db.list_collection_names():
+                if self.used_profile in collection_name:
+                    collection = getattr(db, collection_name)
+                    datastore_data = collection.find_one({"_id": "running"})
+                    modules = list(datastore_data["modules"])
+                    datastore_data_1 = dict(datastore_data)
+                    for element in datastore_data:
+                        if "id" in element or "modules" in element:
+                            del datastore_data_1[element]
+                    datastore_data = datastore_data_1
 
-            if db_name in names:
+                    database_data_binding = pybindJSONDecoder.load_ietf_json(datastore_data, self.binding, modules[0])
+                    xml_data_string = serialise.pybindIETFXMLEncoder.serialise(database_data_binding)
+                    xml_data = etree.XML(xml_data_string)
+                    data_elm.insert(1, xml_data)
 
-                logging.info("Found the datastore requested")
 
-                # Retrieving the data from the datastore
-                datastore_data = db[db_name].find_one({"_id": "running"})
-
-                datastore_data_1 = dict(datastore_data)
-                for element in datastore_data:
-                    if "id" in element:
-                        del datastore_data_1[element]
-                datastore_data = datastore_data_1
-
-                database_data_binding = pybindJSONDecoder.load_ietf_json(datastore_data, self.binding, db_name)
-                logging.info(database_data_binding)
-
-                # Parsing the data to xml
-                xml_data = serialise.pybindIETFXMLEncoder.serialise(database_data_binding)
-                xml_response = etree.XML(xml_data)
-
-            else:
-                raise AttributeError("The requested datastore is not supported")
-
+        xml_response = data_elm
         toreturn = util.filter_results(rpc, xml_response, filter_or_none, self.server.debug)
 
         if "data" not in toreturn.tag:
-            logging.info("data not header")
-            data_elm = etree.Element('data', nsmap={None: 'urn:ietf:params:xml:ns:netconf:base:1.0'})
+            logging.info("Error, data header not found")
+            nsmap = {None : 'urn:ietf:params:xml:ns:netconf:base:1.0'}
+            data_elm = etree.Element('data', nsmap=nsmap)
             data_elm.insert(1, toreturn)
-            logging.info(etree.tostring(data_elm, pretty_print=True))
             toreturn = data_elm
 
         return toreturn
 
-    def rpc_get_config(self, session, rpc, source_elm, filter_or_none):  # pylint: disable=W0613
+    def rpc_get_config(self, session, rpc, source_elm, filter_or_none):
         logging.info("Received get-config rpc: " + etree.tostring(rpc, pretty_print=True))
         dbclient = MongoClient()
         selected_datastore = get_datastore(rpc)
-        # Empty filter
+        data_elm = etree.Element('data', nsmap={None: 'urn:ietf:params:xml:ns:netconf:base:1.0'})
+
         if rpc[0].find('{*}filter') is None:
-            # All configuration files should be appended
+
             db = dbclient.netconf
-            data_elm = etree.Element('data', nsmap={None: 'urn:ietf:params:xml:ns:netconf:base:1.0'})
-            i = 1
             for collection_name in db.list_collection_names():
-                collection = getattr(db,collection_name)
-                collection_data = collection.find_one({"_id": selected_datastore})
-                collection_data_1 = dict(collection_data)
-                for element in collection_data:
-                    if "id" in element:
-                        del collection_data_1[element]
-                collection_data = collection_data_1
+                if self.used_profile in collection_name:
+                    collection = getattr(db, collection_name)
+                    collection_data = collection.find_one({"_id": selected_datastore})
+                    modules = list(collection_data["modules"])
+                    collection_data_1 = dict(collection_data)
+                    for element in collection_data:
+                        if "id" in element or "modules" in element:
+                            del collection_data_1[element]
+                    collection_data = collection_data_1
 
-                collection_binding = pybindJSONDecoder.load_ietf_json(collection_data, self.binding, collection_name)
-                xml_data_string = serialise.pybindIETFXMLEncoder.serialise(collection_binding)
-                xml_data = etree.XML(xml_data_string)
-                data_elm.insert(i,xml_data)
-                i += 1
-            xml_response = data_elm
+                    collection_binding = pybindJSONDecoder.load_ietf_json(collection_data, self.binding, modules[0])
+                    xml_data_string = serialise.pybindIETFXMLEncoder.serialise(collection_binding)
+                    xml_data = etree.XML(xml_data_string)
+                    data_elm.insert(1, xml_data)
 
-        # Only supportedd datastore so far is platform
         else:
-            # Parsing the database name form the rpc tag namespace
-            db_base = rpc[0][1][0].tag.split('}')[0].split('/')[-1]
-            db_source = rpc[0][1][0].tag.split('/')[2].split('.')[0]
-            db_name = db_source + "-" + db_base
-            #logging.info(db_name)
 
-            # Finding the datastore requested
             db = dbclient.netconf
-            names = db.list_collection_names()
-            #logging.info(names)
+            for collection_name in db.list_collection_names():
+                if self.used_profile in collection_name:
+                    collection = getattr(db, collection_name)
+                    datastore_data = collection.find_one({"_id": selected_datastore})
+                    modules = list(datastore_data["modules"])
+                    datastore_data_1 = dict(datastore_data)
+                    for element in datastore_data:
+                        if "id" in element or "modules" in element:
+                            del datastore_data_1[element]
+                    datastore_data = datastore_data_1
 
-            if db_name in names:
+                    database_data_binding = pybindJSONDecoder.load_ietf_json(datastore_data, self.binding, modules[0])
+                    xml_data_string = serialise.pybindIETFXMLEncoder.serialise(database_data_binding)
+                    xml_data = etree.XML(xml_data_string)
+                    data_elm.insert(1, xml_data)
 
-                logging.info("Found the datastore requested")
-
-                # Retrieving the data from the datastore
-                datastore_data = db[db_name].find_one({"_id": selected_datastore})
-
-                datastore_data_1 = dict(datastore_data)
-                for element in datastore_data:
-                    if "id" in element:
-                        del datastore_data_1[element]
-                datastore_data = datastore_data_1
-
-                database_data_binding = pybindJSONDecoder.load_ietf_json(datastore_data, self.binding, db_name)
-                logging.info(database_data_binding)
-
-                # Parsing the data to xml
-                xml_data = serialise.pybindIETFXMLEncoder.serialise(database_data_binding)
-                xml_response = etree.XML(xml_data)
-
-            else:
-                raise AttributeError("The requested datastore is not supported")
-
+        xml_response = data_elm
         toreturn = util.filter_results(rpc, xml_response, filter_or_none, self.server.debug)
         util.trimstate(toreturn)
 
         if "data" not in toreturn.tag:
-            logging.info("data not header")
+            logging.info("Error, data header not found")
             nsmap = {None : 'urn:ietf:params:xml:ns:netconf:base:1.0'}
-            data_elm = etree.Element('data',nsmap={None : 'urn:ietf:params:xml:ns:netconf:base:1.0'})
-            data_elm.insert(1,toreturn)
-            logging.info(etree.tostring(data_elm,pretty_print=True))
+            data_elm = etree.Element('data', nsmap=nsmap)
+            data_elm.insert(1, toreturn)
             toreturn = data_elm
 
         return toreturn
@@ -336,7 +305,7 @@ class NetconfEmulator(object):
         dbclient = MongoClient()
         db = dbclient.netconf
 
-        data_response = util.elm("ok")
+        response = etree.Element("ok")
         datastore_to_insert = get_datastore(rpc)
         data_to_insert_xml = etree.fromstring(etree.tostring(rpc[0][1]))
 
@@ -344,8 +313,9 @@ class NetconfEmulator(object):
             if self.used_profile in collection_name:
                  collection = getattr(db, collection_name)
                  running_config = collection.find_one({"_id": datastore_to_insert})
+                 modules = list(running_config["modules"])
                  del running_config["_id"]
-                 running_config_b = pybindJSONDecoder.load_ietf_json(running_config, self.binding, collection_name)
+                 running_config_b = pybindJSONDecoder.load_ietf_json(running_config, self.binding, modules[0])
                  running_config_xml_string = serialise.pybindIETFXMLEncoder.serialise(running_config_b)
                  running_config_xml = etree.fromstring(running_config_xml_string)
 
@@ -353,14 +323,15 @@ class NetconfEmulator(object):
 
                  collection.delete_one({"_id": datastore_to_insert})
                  newconfig_string = etree.tostring(newconfig)
-                 database_data = serialise.pybindIETFXMLDecoder.decode(newconfig_string, self.binding, collection_name)
+                 database_data = serialise.pybindIETFXMLDecoder.decode(newconfig_string, self.binding, modules[0])
                  database_string = pybindJSON.dumps(database_data, mode="ietf")
                  database_json = json.loads(database_string)
 
                  database_json["_id"] = datastore_to_insert
+                 database_json["modules"] = modules
                  collection.insert_one(database_json)
 
-        return data_response
+        return response
 
     def rpc_system_restart(self, session, rpc, *params):
         raise error.AccessDeniedAppError(rpc)

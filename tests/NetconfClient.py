@@ -20,6 +20,7 @@ def main(*margs):
     password = args.password
     rpc = args.rpc
     datastore = args.datastore
+
     if args.filter_or_config_file is None:
         filter_or_config = None
     else:
@@ -35,7 +36,7 @@ def main(*margs):
     elif rpc == 'get':
 
         get_response = man.get(filter_or_config)
-        print et.tostring(get_response.data_ele, pretty_print=True)
+        print get_response
 
     elif rpc == 'edit-config':
 
@@ -48,11 +49,11 @@ def main(*margs):
 
         print edit_config_response
 
-    elif rpc == 'available-models':
+    elif rpc == 'available-profiles':
 
-        rpc = "<available-models/>"
-        available_models_response = man.dispatch(et.fromstring(rpc))
-        print available_models_response
+        rpc = "<available-profiles/>"
+        available_profiles_response = man.dispatch(et.fromstring(rpc))
+        print available_profiles_response
 
 
     else:
