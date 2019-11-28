@@ -1,9 +1,9 @@
 from ncclient import manager
 from argparse import ArgumentParser
-from lxml import etree as et
+from lxml import etree
 
 def main(*margs):
-    parser = ArgumentParser("Netconf Client")
+    parser = ArgumentParser("Netconf Client CLI")
     parser.add_argument('--host',default='localhost', help='Netconf host')
     parser.add_argument('--port', type=int, default=8300, help='Netconf server port')
     parser.add_argument("--username", default="admin", help='Netconf username')
@@ -20,11 +20,7 @@ def main(*margs):
     password = args.password
     rpc = args.rpc
     datastore = args.datastore
-
-    if args.filter_or_config_file is None:
-        filter_or_config = None
-    else:
-        filter_or_config = open(args.filter_or_config_file, 'r+').read()
+    filter_or_config = open(args.filter_or_config_file, 'r+').read() if args.filter_or_config_file is not None else None
 
     man = manager.connect(host=host, port=port, username=username, password=password, timeout=120, hostkey_verify=False, look_for_keys=False, allow_agent=False)
 
@@ -35,7 +31,11 @@ def main(*margs):
 
     elif rpc == 'get':
 
-        get_response = man.get(filter_or_config)
+        if filter_or_config is not None:
+            rpc = "<get>" + filter_or_config + "</get>"
+        else:
+            rpc = "<get/>"
+        get_response = man.dispatch(etree.fromstring(rpc))
         print get_response
 
     elif rpc == 'edit-config':
@@ -43,19 +43,22 @@ def main(*margs):
         if filter_or_config is None:
             print("Error. Cannot send a edit-config rpc without config tag")
             exit(1)
-        else:
-            rpc = "<edit-config><target><" + datastore + "/></target>" + filter_or_config + "</edit-config>"
-            edit_config_response = man.dispatch(et.fromstring(rpc))
 
+        rpc = "<edit-config><target><" + datastore + "/></target>" + filter_or_config + "</edit-config>"
+        edit_config_response = man.dispatch(etree.fromstring(rpc))
         print edit_config_response
 
     elif rpc == 'available-profiles':
 
         rpc = "<available-profiles/>"
-        available_profiles_response = man.dispatch(et.fromstring(rpc))
+        available_profiles_response = man.dispatch(etree.fromstring(rpc))
         print available_profiles_response
 
+    elif rpc == 'commit':
 
+        rpc = "<commit/>"
+        commit_response = man.dispatch(etree.fromstring(rpc))
+        print commit_response
     else:
         print("Unknown RPC")
 

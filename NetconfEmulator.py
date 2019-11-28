@@ -32,95 +32,9 @@ from pyangbind.lib.serialise import pybindJSONDecoder
 import json
 from os import listdir, getcwd
 from pydoc import locate
-from internal import objects
+from internal import objects, utils
 
 nsmap_add("sys", "urn:ietf:params:xml:ns:yang:ietf-system")
-
-
-def process_changes(data_to_insert_xml, current_config_xml):
-
-    config_tree = etree.ElementTree(current_config_xml)
-    data_tree = etree.ElementTree(data_to_insert_xml)
-
-    identifier_tag = ""
-    identifier_value = ""
-
-    for subitem_data in data_to_insert_xml.iter():
-        if subitem_data.text.strip() != "":
-            identifier_tag = subitem_data.tag
-            identifier_value = subitem_data.text
-            target_element_path = data_tree.getelementpath(subitem_data)
-            target_element_data = data_tree.find(target_element_path).getparent()
-            break
-
-
-    target_element_config = None
-
-    for subitem_config in current_config_xml.iter():
-        if subitem_config.tag == identifier_tag and subitem_config.text.strip() == identifier_value:
-            element_path = config_tree.getelementpath(subitem_config)
-            target_element_config = config_tree.find(element_path).getparent()
-            break
-
-    if target_element_config is not None:
-        target_element_config_tree = etree.ElementTree(target_element_config)
-
-    target_element_data_tree = etree.ElementTree(target_element_data)
-
-    if target_element_config is None:
-        element_data_path = data_tree.getelementpath(target_element_data)
-        element_data_path_split = element_data_path.split("/{")
-        element_data_path_split.pop()
-        parent_path = ""
-        for subpath in element_data_path_split:
-            parent_path = parent_path + "/{" + subpath
-
-        parent_path = parent_path[2:len(parent_path)]
-        parent_element = config_tree.find(parent_path)
-        parent_element.insert(len(parent_element.getchildren()), target_element_data)
-
-    else:
-
-        for data_item in target_element_data.iter():
-
-            if data_item.text.strip() != "":
-                path = target_element_data_tree.getelementpath(data_item)
-                config_subel = target_element_config_tree.find(path)
-
-                if config_subel is None:
-                    path_split = path.split("/{")
-                    path_split.pop()
-                    parent_path = ""
-                    for subpath in path_split:
-                        parent_path = parent_path + "/{" + subpath
-
-                    parent_path = parent_path[2:len(parent_path)]
-                    parent_element = target_element_config_tree.find(parent_path)
-                    parent_element.insert(len(parent_element.getchildren()), data_item)
-
-                else:
-                    if config_subel.text != data_item.text:
-                        config_subel.text = data_item.text
-
-
-    return current_config_xml
-
-
-
-
-def get_datastore(rpc):
-    datastore_raw = etree.tostring(rpc[0][0][0])
-    if "running" in datastore_raw:
-        datastore = 'running'
-    elif "candidate" in datastore_raw:
-        datastore = 'candidate'
-    elif "startup" in datastore_raw:
-        datastore = 'startup'
-    else:
-        logging.info("Unknown datastore: "+datastore_raw)
-        exit(1)
-
-    return datastore
 
 
 class NetconfEmulator(object):
@@ -129,13 +43,13 @@ class NetconfEmulator(object):
         bindings_files_folder = getcwd() + "/bindings"
         bindings_folder_list = listdir(bindings_files_folder)
         for bind_file in bindings_folder_list:
-            if "binding_" in bind_file and '.py' in bind_file and '.pyc' not in bind_file:
+            if "binding-" in bind_file and '.py' in bind_file and '.pyc' not in bind_file:
                 binding_file = bind_file
                 break
 
         binding_file_fixed = binding_file.replace(".py", "")
 
-        self.used_profile = binding_file_fixed.split("_")[1]
+        self.used_profile = binding_file_fixed.split("-")[1]
         self.binding = locate('bindings.' + binding_file_fixed)
 
         logging.info("Used profile: "+self.used_profile)
@@ -153,36 +67,79 @@ class NetconfEmulator(object):
 
     def rpc_available_profiles(self, session, rpc, *unused):
         logging.info("Received available-profiles rpc: " + etree.tostring(rpc, pretty_print=True))
-        response = etree.Element("available-models")
+        dbclient = MongoClient()
+        db = dbclient.netconf
+        response = etree.Element("available-profiles")
 
         bindings_files_folder = getcwd() + "/bindings"
         bindings_folder_list = listdir(bindings_files_folder)
         i = 0
-        j = 0
         for bind_file in bindings_folder_list:
-            if "binding_" in bind_file and '.py' in bind_file and '.pyc' not in bind_file:
+            if "binding-" in bind_file and '.py' in bind_file and '.pyc' not in bind_file:
                 binding_file_fixed = bind_file.replace(".py", "")
-                model = str(binding_file_fixed.split("-")[1]) + ".yang"
-                model_element = etree.Element("available-model")
+                profile = str(binding_file_fixed.split("-")[1])
+                profile_name_subel = etree.Element("name")
+                profile_name_subel.text = profile
+                profile_active_subel = etree.Element("active")
+                profile_active_subel.text = str(profile == self.used_profile)
 
-                model_element.text = model
-                response.insert(i, model_element)
+                profile_element = etree.Element("available-profile")
+                profile_element.insert(0, profile_name_subel)
+                profile_element.insert(1, profile_active_subel)
+
+                modules_element = etree.Element("modules")
+
+                for collection_name in db.list_collection_names():
+                    if collection_name == profile:
+                        collection = getattr(db, collection_name)
+                        modules_data = collection.find_one({"_id": "modules"})
+                        modules_dict = dict(modules_data)
+                        modules = modules_dict["modules"]
+                        j = 0
+                        for module in modules:
+                            module_name_element = etree.Element("module")
+                            module_name_element.text = module
+                            modules_element.insert(j, module_name_element)
+                            j = j + 1
+
+                profile_element.insert(2, modules_element)
+                response.insert(i, profile_element)
                 i += 1
 
 
         return response
 
-    def rpc_change_profile(self, session, rpc, *unused):
+    def rpc_change_active_profile(self, session, rpc, *unused):
         logging.info("Received change-profile rpc: "+etree.tostring(rpc, pretty_print=True))
 
     def rpc_commit(self, session, rpc, *unused):
         logging.info("Received commit rpc: " + etree.tostring(rpc, pretty_print=True))
+        response = etree.Element("ok")
+        dbclient = MongoClient()
+        db = dbclient.netconf
+        for collection_name in db.list_collection_names():
+            if self.used_profile in collection_name:
+                collection = getattr(db, collection_name)
+                modules = dict(collection.find_one({"_id": "modules"}))["modules"]
+                delete_running_result = collection.delete_one({"_id": "running"})
+                collection_data_candidate = collection.find_one({"_id": "candidate"})
+                del collection_data_candidate["_id"]
+                collection_binding_candidate = pybindJSONDecoder.load_ietf_json(collection_data_candidate, self.binding, modules[0])
+                collection_xml_string_candidate = serialise.pybindIETFXMLEncoder.serialise(collection_binding_candidate)
 
-    def rpc_copy_config(self, session, rpc, *unused):
-        logging.info("Received copy-config rpc: " + etree.tostring(rpc, pretty_print=True))
+                database_data = serialise.pybindIETFXMLDecoder.decode(collection_xml_string_candidate, self.binding, modules[0])
+                database_string = pybindJSON.dumps(database_data, mode="ietf")
+                database_json = json.loads(database_string)
+
+                database_json["_id"] = "running"
+                collection.insert_one(database_json)
+
+        return response
 
     def rpc_delete_config(self, session, rpc, *unused):
         logging.info("Received delete-config rpc: " + etree.tostring(rpc, pretty_print=True))
+        dbclient = MongoClient()
+        selected_datastore = utils.get_datastore(rpc)
 
     def rpc_discard_changes(self, session, rpc, *unused):
         logging.info("Received discard-changes rpc: " + etree.tostring(rpc, pretty_print=True))
@@ -199,10 +156,10 @@ class NetconfEmulator(object):
                 if self.used_profile in collection_name:
                     collection = getattr(db, collection_name)
                     collection_data = collection.find_one({"_id": "running"})
-                    modules = list(collection_data["modules"])
+                    modules = dict(collection.find_one({"_id": "modules"}))["modules"]
                     collection_data_1 = dict(collection_data)
                     for element in collection_data:
-                        if "id" in element or "modules" in element:
+                        if "id" in element:
                             del collection_data_1[element]
                     collection_data = collection_data_1
 
@@ -218,10 +175,10 @@ class NetconfEmulator(object):
                 if self.used_profile in collection_name:
                     collection = getattr(db, collection_name)
                     datastore_data = collection.find_one({"_id": "running"})
-                    modules = list(datastore_data["modules"])
+                    modules = dict(collection.find_one({"_id": "modules"}))["modules"]
                     datastore_data_1 = dict(datastore_data)
                     for element in datastore_data:
-                        if "id" in element or "modules" in element:
+                        if "id" in element:
                             del datastore_data_1[element]
                     datastore_data = datastore_data_1
 
@@ -246,7 +203,7 @@ class NetconfEmulator(object):
     def rpc_get_config(self, session, rpc, source_elm, filter_or_none):
         logging.info("Received get-config rpc: " + etree.tostring(rpc, pretty_print=True))
         dbclient = MongoClient()
-        selected_datastore = get_datastore(rpc)
+        selected_datastore = utils.get_datastore(rpc)
         data_elm = etree.Element('data', nsmap={None: 'urn:ietf:params:xml:ns:netconf:base:1.0'})
 
         if rpc[0].find('{*}filter') is None:
@@ -256,10 +213,10 @@ class NetconfEmulator(object):
                 if self.used_profile in collection_name:
                     collection = getattr(db, collection_name)
                     collection_data = collection.find_one({"_id": selected_datastore})
-                    modules = list(collection_data["modules"])
+                    modules = dict(collection.find_one({"_id": "modules"}))["modules"]
                     collection_data_1 = dict(collection_data)
                     for element in collection_data:
-                        if "id" in element or "modules" in element:
+                        if "id" in element:
                             del collection_data_1[element]
                     collection_data = collection_data_1
 
@@ -275,10 +232,10 @@ class NetconfEmulator(object):
                 if self.used_profile in collection_name:
                     collection = getattr(db, collection_name)
                     datastore_data = collection.find_one({"_id": selected_datastore})
-                    modules = list(datastore_data["modules"])
+                    modules = dict(collection.find_one({"_id": "modules"}))["modules"]
                     datastore_data_1 = dict(datastore_data)
                     for element in datastore_data:
-                        if "id" in element or "modules" in element:
+                        if "id" in element:
                             del datastore_data_1[element]
                     datastore_data = datastore_data_1
 
@@ -289,7 +246,7 @@ class NetconfEmulator(object):
 
         xml_response = data_elm
         toreturn = util.filter_results(rpc, xml_response, filter_or_none, self.server.debug)
-        util.trimstate(toreturn)
+        utils.remove_state(toreturn)
 
         if "data" not in toreturn.tag:
             logging.info("Error, data header not found")
@@ -300,26 +257,26 @@ class NetconfEmulator(object):
 
         return toreturn
 
-    def rpc_edit_config(self, unused_session, rpc, *unused_params):
+    def rpc_edit_config(self, session, rpc, *unused_params):
         logging.info("Received edit-config rpc: "+etree.tostring(rpc, pretty_print=True))
         dbclient = MongoClient()
         db = dbclient.netconf
 
         response = etree.Element("ok")
-        datastore_to_insert = get_datastore(rpc)
+        datastore_to_insert = utils.get_datastore(rpc)
         data_to_insert_xml = etree.fromstring(etree.tostring(rpc[0][1]))
 
         for collection_name in db.list_collection_names():
             if self.used_profile in collection_name:
                  collection = getattr(db, collection_name)
                  running_config = collection.find_one({"_id": datastore_to_insert})
-                 modules = list(running_config["modules"])
+                 modules = dict(collection.find_one({"_id": "modules"}))["modules"]
                  del running_config["_id"]
                  running_config_b = pybindJSONDecoder.load_ietf_json(running_config, self.binding, modules[0])
                  running_config_xml_string = serialise.pybindIETFXMLEncoder.serialise(running_config_b)
                  running_config_xml = etree.fromstring(running_config_xml_string)
 
-                 newconfig = process_changes(data_to_insert_xml, running_config_xml)
+                 newconfig = utils.process_changes(data_to_insert_xml, running_config_xml)
 
                  collection.delete_one({"_id": datastore_to_insert})
                  newconfig_string = etree.tostring(newconfig)
@@ -328,7 +285,6 @@ class NetconfEmulator(object):
                  database_json = json.loads(database_string)
 
                  database_json["_id"] = datastore_to_insert
-                 database_json["modules"] = modules
                  collection.insert_one(database_json)
 
         return response

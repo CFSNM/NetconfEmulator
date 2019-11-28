@@ -47,18 +47,20 @@ database_string = pybindJSON.dumps(database_data, mode="ietf")
 
 startup_json = json.loads(database_string)
 startup_json["_id"] = "startup"
-startup_json["modules"] = dependencies
 
 candidate_json = json.loads(database_string)
 candidate_json["_id"] = "candidate"
-candidate_json["modules"] = dependencies
 
 running_json = json.loads(database_string)
 running_json["_id"] = "running"
-running_json["modules"] = dependencies
+
+modules_json = json.loads('{}')
+modules_json["_id"] = "modules"
+modules_json["modules"] = dependencies
 
 print("Inserting files into database")
 collection = getattr(db, database)
 result_startup = collection.insert_one(startup_json)
 result_candidate = collection.insert_one(candidate_json)
 result_running = collection.insert_one(running_json)
+result_modules = collection.insert_one(modules_json)
