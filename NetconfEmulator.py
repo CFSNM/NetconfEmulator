@@ -49,7 +49,7 @@ class NetconfEmulator(object):
 
         binding_file_fixed = binding_file.replace(".py", "")
 
-        self.used_profile = binding_file_fixed.split("-")[1]
+        self.used_profile = binding_file_fixed.split("inding-")[1]
         self.binding = locate('bindings.' + binding_file_fixed)
 
         logging.info("Used profile: "+self.used_profile)
@@ -109,8 +109,8 @@ class NetconfEmulator(object):
 
         return response
 
-    def rpc_change_active_profile(self, session, rpc, *unused):
-        logging.info("Received change-profile rpc: "+etree.tostring(rpc, pretty_print=True))
+    def rpc_activate_profile(self, session, rpc, *unused):
+        logging.info("Received activate-profile rpc: "+etree.tostring(rpc, pretty_print=True))
 
     def rpc_commit(self, session, rpc, *unused):
         logging.info("Received commit rpc: " + etree.tostring(rpc, pretty_print=True))
@@ -143,7 +143,26 @@ class NetconfEmulator(object):
 
     def rpc_discard_changes(self, session, rpc, *unused):
         logging.info("Received discard-changes rpc: " + etree.tostring(rpc, pretty_print=True))
+        response = etree.Element("ok")
+        dbclient = MongoClient()
+        db = dbclient.netconf
+        for collection_name in db.list_collection_names():
+            if self.used_profile in collection_name:
+                collection = getattr(db, collection_name)
+                modules = dict(collection.find_one({"_id": "modules"}))["modules"]
+                delete_running_result = collection.delete_one({"_id": "candidate"})
+                collection_data_running = collection.find_one({"_id": "running"})
+                del collection_data_running["_id"]
+                collection_binding_running = pybindJSONDecoder.load_ietf_json(collection_data_running, self.binding,
+                                                                                modules[0])
+                collection_xml_string_running = serialise.pybindIETFXMLEncoder.serialise(collection_binding_running)
 
+                database_data = serialise.pybindIETFXMLDecoder.decode(collection_xml_string_running, self.binding, modules[0])
+                database_string = pybindJSON.dumps(database_data, mode="ietf")
+                database_json = json.loads(database_string)
+
+                database_json["_id"] = "candidate"
+                collection.insert_one(database_json)
 
     def rpc_get(self, session, rpc, filter_or_none):  # pylint: disable=W0613
         logging.info("Received get rpc: "+etree.tostring(rpc, pretty_print=True))

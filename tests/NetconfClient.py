@@ -59,6 +59,12 @@ def main(*margs):
         rpc = "<commit/>"
         commit_response = man.dispatch(etree.fromstring(rpc))
         print commit_response
+
+    elif rpc == 'discard-changes':
+
+        rpc = "<discard-changes/>"
+        discard_changes_response = man.dispatch(etree.fromstring(rpc))
+        print discard_changes_response
     else:
         print("Unknown RPC")
 
