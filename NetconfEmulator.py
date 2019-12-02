@@ -77,7 +77,7 @@ class NetconfEmulator(object):
         for bind_file in bindings_folder_list:
             if "binding-" in bind_file and '.py' in bind_file and '.pyc' not in bind_file:
                 binding_file_fixed = bind_file.replace(".py", "")
-                profile = str(binding_file_fixed.split("-")[1])
+                profile = str(binding_file_fixed.split("inding-")[1])
                 profile_name_subel = etree.Element("name")
                 profile_name_subel.text = profile
                 profile_active_subel = etree.Element("active")
@@ -106,11 +106,29 @@ class NetconfEmulator(object):
                 response.insert(i, profile_element)
                 i += 1
 
-
         return response
 
     def rpc_activate_profile(self, session, rpc, *unused):
         logging.info("Received activate-profile rpc: "+etree.tostring(rpc, pretty_print=True))
+        response = etree.Element("ok")
+
+        name = rpc[0][0].text
+        logging.info(name)
+        bindings_files_folder = getcwd() + "/bindings"
+        bindings_folder_list = listdir(bindings_files_folder)
+        for bind_file in bindings_folder_list:
+            if "binding-" in bind_file and '.py' in bind_file and '.pyc' not in bind_file and name in bind_file:
+                binding_file = bind_file
+                break
+
+        binding_file_fixed = binding_file.replace(".py", "")
+
+        self.used_profile = binding_file_fixed.split("inding-")[1]
+        self.binding = locate('bindings.' + binding_file_fixed)
+
+        logging.info("Used profile: "+self.used_profile)
+
+        return response
 
     def rpc_commit(self, session, rpc, *unused):
         logging.info("Received commit rpc: " + etree.tostring(rpc, pretty_print=True))
