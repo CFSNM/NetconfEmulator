@@ -154,6 +154,32 @@ class NetconfEmulator(object):
 
         return response
 
+    def rpc_copy_config(self, session, rpc, *unused):
+        logging.info("Received copy-config rpc: " + etree.tostring(rpc, pretty_print=True))
+        response = etree.Element("ok")
+        dbclient = MongoClient()
+        db = dbclient.netconf
+        target_datastore = rpc[0].find("target")[0].tag
+        source_datastore = rpc[0].find("source")[0].tag
+        for collection_name in db.list_collection_names():
+            if self.used_profile in collection_name:
+                collection = getattr(db, collection_name)
+                modules = dict(collection.find_one({"_id": "modules"}))["modules"]
+                collection.delete_one({"_id": target_datastore})
+                collection_data_running = collection.find_one({"_id": source_datastore})
+                del collection_data_running["_id"]
+                collection_binding_running = pybindJSONDecoder.load_ietf_json(collection_data_running, self.binding, modules[0])
+                collection_xml_string_running = serialise.pybindIETFXMLEncoder.serialise(collection_binding_running)
+                database_data = serialise.pybindIETFXMLDecoder.decode(collection_xml_string_running, self.binding, modules[0])
+                database_string = pybindJSON.dumps(database_data, mode="ietf")
+                database_json = json.loads(database_string)
+
+                database_json["_id"] = target_datastore
+                collection.insert_one(database_json)
+
+        return response
+
+
     def rpc_delete_config(self, session, rpc, *unused):
         logging.info("Received delete-config rpc: " + etree.tostring(rpc, pretty_print=True))
         response = etree.Element("ok")
@@ -164,6 +190,9 @@ class NetconfEmulator(object):
             if self.used_profile in collection_name:
                 collection = getattr(db, collection_name)
                 collection.delete_one({"_id": selected_datastore})
+                empty_json = json.loads("{}")
+                empty_json["_id"] = selected_datastore
+                collection.insert_one(empty_json)
 
         return response
 

@@ -9,9 +9,10 @@ def main(*margs):
     parser.add_argument("--username", default="admin", help='Netconf username')
     parser.add_argument("--password", default="admin", help='Netconf password')
     parser.add_argument("--rpc", default='get-config', help="RPC to execute (get-config, get, edit-config, available-profiles, activate-profile, commit, discard-changes)")
-    parser.add_argument("--datastore", default='running', help="Netconf datastore (running or candidate). Only for get-config and edit-config RPCs.")
+    parser.add_argument("--datastore", default='running', help="Netconf datastore (running, candidate or startup). Only for get-config, edit-config and delete-config RPCs.")
     parser.add_argument("--new_active_profile", default=None, help="Profile to activate. Only for activate-profile RPC.")
     parser.add_argument("--filter_or_config_file", default=None, help="RPC filter field for get-config and get RPCs or RPC config field for edit-config RPC.")
+    parser.add_argument("--source_target_datastores", default="running_startup", help="Source and target datastores (Separated by a _ character). Only for copy-config RPC.")
     args = parser.parse_args(*margs)
 
     host = args.host
@@ -22,6 +23,7 @@ def main(*margs):
     datastore = args.datastore
     new_profile = args.new_active_profile
     filter_or_config = open(args.filter_or_config_file, 'r+').read() if args.filter_or_config_file is not None else None
+    source_target_datastores = args.source_target_datastores
 
     man = manager.connect(host=host, port=port, username=username, password=password, timeout=120, hostkey_verify=False, look_for_keys=False, allow_agent=False)
 
@@ -77,6 +79,20 @@ def main(*margs):
         rpc = "<discard-changes/>"
         discard_changes_response = man.dispatch(etree.fromstring(rpc))
         print discard_changes_response
+
+    elif rpc == 'copy-config':
+
+        source_target_datastores_list = source_target_datastores.split("_")
+        rpc = "<copy-config><target><" + source_target_datastores_list[1] + "/></target><source><" + source_target_datastores_list[0] + "/></source></copy-config>"
+        copy_config_response = man.dispatch(etree.fromstring(rpc))
+        print copy_config_response
+
+    elif rpc == 'delete-config':
+
+        rpc = "<delete-config><target><" + datastore + "/></target></delete-config>"
+        delete_config_response = man.dispatch(etree.fromstring(rpc))
+        print delete_config_response
+
     else:
         print("Unknown RPC")
 
