@@ -58,7 +58,7 @@ class NetconfEmulator(object):
     def close(self):
         self.server.close()
 
-    def nc_append_capabilities(self, capabilities):  # pylint: disable=W0613
+    def nc_append_capabilities(self, capabilities):
         """The server should append any capabilities it supports to capabilities"""
         util.subelm(capabilities,
                     "capability").text = "urn:ietf:params:netconf:capability:xpath:1.0"
@@ -139,7 +139,7 @@ class NetconfEmulator(object):
             if self.used_profile in collection_name:
                 collection = getattr(db, collection_name)
                 modules = dict(collection.find_one({"_id": "modules"}))["modules"]
-                delete_running_result = collection.delete_one({"_id": "running"})
+                collection.delete_one({"_id": "running"})
                 collection_data_candidate = collection.find_one({"_id": "candidate"})
                 del collection_data_candidate["_id"]
                 collection_binding_candidate = pybindJSONDecoder.load_ietf_json(collection_data_candidate, self.binding, modules[0])
@@ -156,8 +156,16 @@ class NetconfEmulator(object):
 
     def rpc_delete_config(self, session, rpc, *unused):
         logging.info("Received delete-config rpc: " + etree.tostring(rpc, pretty_print=True))
+        response = etree.Element("ok")
         dbclient = MongoClient()
+        db = dbclient.netconf
         selected_datastore = utils.get_datastore(rpc)
+        for collection_name in db.list_collection_names():
+            if self.used_profile in collection_name:
+                collection = getattr(db, collection_name)
+                collection.delete_one({"_id": selected_datastore})
+
+        return response
 
     def rpc_discard_changes(self, session, rpc, *unused):
         logging.info("Received discard-changes rpc: " + etree.tostring(rpc, pretty_print=True))
@@ -168,19 +176,19 @@ class NetconfEmulator(object):
             if self.used_profile in collection_name:
                 collection = getattr(db, collection_name)
                 modules = dict(collection.find_one({"_id": "modules"}))["modules"]
-                delete_running_result = collection.delete_one({"_id": "candidate"})
+                collection.delete_one({"_id": "candidate"})
                 collection_data_running = collection.find_one({"_id": "running"})
                 del collection_data_running["_id"]
-                collection_binding_running = pybindJSONDecoder.load_ietf_json(collection_data_running, self.binding,
-                                                                                modules[0])
+                collection_binding_running = pybindJSONDecoder.load_ietf_json(collection_data_running, self.binding, modules[0])
                 collection_xml_string_running = serialise.pybindIETFXMLEncoder.serialise(collection_binding_running)
-
                 database_data = serialise.pybindIETFXMLDecoder.decode(collection_xml_string_running, self.binding, modules[0])
                 database_string = pybindJSON.dumps(database_data, mode="ietf")
                 database_json = json.loads(database_string)
 
                 database_json["_id"] = "candidate"
                 collection.insert_one(database_json)
+
+        return response
 
     def rpc_get(self, session, rpc, filter_or_none):  # pylint: disable=W0613
         logging.info("Received get rpc: "+etree.tostring(rpc, pretty_print=True))
@@ -192,14 +200,9 @@ class NetconfEmulator(object):
             for collection_name in db.list_collection_names():
                 if self.used_profile in collection_name:
                     collection = getattr(db, collection_name)
-                    collection_data = collection.find_one({"_id": "running"})
+                    collection_data = dict(collection.find_one({"_id": "running"}))
                     modules = dict(collection.find_one({"_id": "modules"}))["modules"]
-                    collection_data_1 = dict(collection_data)
-                    for element in collection_data:
-                        if "id" in element:
-                            del collection_data_1[element]
-                    collection_data = collection_data_1
-
+                    del collection_data["_id"]
                     collection_binding = pybindJSONDecoder.load_ietf_json(collection_data, self.binding, modules[0])
                     xml_data_string = serialise.pybindIETFXMLEncoder.serialise(collection_binding)
                     xml_data = etree.XML(xml_data_string)
@@ -211,14 +214,9 @@ class NetconfEmulator(object):
             for collection_name in db.list_collection_names():
                 if self.used_profile in collection_name:
                     collection = getattr(db, collection_name)
-                    datastore_data = collection.find_one({"_id": "running"})
+                    datastore_data = dict(collection.find_one({"_id": "running"}))
                     modules = dict(collection.find_one({"_id": "modules"}))["modules"]
-                    datastore_data_1 = dict(datastore_data)
-                    for element in datastore_data:
-                        if "id" in element:
-                            del datastore_data_1[element]
-                    datastore_data = datastore_data_1
-
+                    del datastore_data["_id"]
                     database_data_binding = pybindJSONDecoder.load_ietf_json(datastore_data, self.binding, modules[0])
                     xml_data_string = serialise.pybindIETFXMLEncoder.serialise(database_data_binding)
                     xml_data = etree.XML(xml_data_string)
@@ -249,14 +247,9 @@ class NetconfEmulator(object):
             for collection_name in db.list_collection_names():
                 if self.used_profile in collection_name:
                     collection = getattr(db, collection_name)
-                    collection_data = collection.find_one({"_id": selected_datastore})
+                    collection_data = dict(collection.find_one({"_id": selected_datastore}))
                     modules = dict(collection.find_one({"_id": "modules"}))["modules"]
-                    collection_data_1 = dict(collection_data)
-                    for element in collection_data:
-                        if "id" in element:
-                            del collection_data_1[element]
-                    collection_data = collection_data_1
-
+                    del collection_data["_id"]
                     collection_binding = pybindJSONDecoder.load_ietf_json(collection_data, self.binding, modules[0])
                     xml_data_string = serialise.pybindIETFXMLEncoder.serialise(collection_binding)
                     xml_data = etree.XML(xml_data_string)
@@ -268,14 +261,9 @@ class NetconfEmulator(object):
             for collection_name in db.list_collection_names():
                 if self.used_profile in collection_name:
                     collection = getattr(db, collection_name)
-                    datastore_data = collection.find_one({"_id": selected_datastore})
+                    datastore_data = dict(collection.find_one({"_id": selected_datastore}))
                     modules = dict(collection.find_one({"_id": "modules"}))["modules"]
-                    datastore_data_1 = dict(datastore_data)
-                    for element in datastore_data:
-                        if "id" in element:
-                            del datastore_data_1[element]
-                    datastore_data = datastore_data_1
-
+                    del datastore_data["_id"]
                     database_data_binding = pybindJSONDecoder.load_ietf_json(datastore_data, self.binding, modules[0])
                     xml_data_string = serialise.pybindIETFXMLEncoder.serialise(database_data_binding)
                     xml_data = etree.XML(xml_data_string)
