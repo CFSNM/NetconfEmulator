@@ -156,3 +156,34 @@ def subtree_filter(data,rpc):
     #logging.info(etree.tostring(unprunned_toreturn,pretty_print=True))
 
     return unprunned_toreturn
+    
+def filter_result(rpc, data, filter_or_none, debug=False):
+    """Check for a user filter and prune the result data accordingly.
+    :param rpc: An RPC message element.
+    :param data: The data to filter.
+    :param filter_or_none: Filter element or None.
+    :type filter_or_none: `lxml.Element`
+    """
+    if filter_or_none is None:
+        return data
+
+    if 'type' not in filter_or_none.attrib:
+        # Check for the pathalogical case of empty filter since that's easy to implement.
+        if not filter_or_none.getchildren():
+            return elm("data")
+        # xpf = Convert subtree filter to xpath!
+
+    elif filter_or_none.attrib['type'] == "subtree":
+        logger.debug("Filtering with subtree")
+        return subtree_filter(data,rpc)
+
+    elif filter_or_none.attrib['type'] == "xpath":
+        if 'select' not in filter_or_none.attrib:
+            raise error.MissingAttributeProtoError(rpc, filter_or_none, "select")
+        xpf = filter_or_none.attrib['select']
+
+        logger.debug("Filtering on xpath expression: %s", str(xpf))
+        return xpath_filter_result(data, xpf)
+    else:
+        msg = "unexpected type: " + str(filter_or_none.attrib['type'])
+        raise error.BadAttributeProtoError(rpc, filter_or_none, "type", message=msg)
