@@ -1,0 +1,7 @@
+<filter>
+     <components xmlns="http://openconfig.net/yang/platform">
+        <component>
+            <name>shelf-1</name>
+        </component>
+     </components>
+</filter>
