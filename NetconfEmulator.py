@@ -268,7 +268,7 @@ class NetconfEmulator(object):
                 xml_data = etree.XML(xml_data_string)
                 response.insert(1, xml_data)
 
-        toreturn = util.filter_results(rpc, response, filter_or_none, self.server.debug)
+        toreturn = utils.filter_result(rpc, response, filter_or_none, self.server.debug)
 
         return toreturn
 

@@ -1,5 +1,7 @@
 from lxml import etree
 import logging
+from netconf import NSMAP, error, qmap, util
+
 
 def remove_state(data):
     for state in data.iter("{*}state"):
@@ -90,4 +92,53 @@ def get_datastore(rpc):
 
     return datastore
 
+    
+def from_filter_to_xpath(rpc):
 
+    xpath = ''
+
+    filter_elm = None
+    for rpc_elm in rpc.iter():
+        if 'filter' in rpc_elm.tag:
+            filter_elm = rpc_elm
+
+    for filter_subel in filter_elm[0].iter():
+        tag = filter_subel.tag.split('}')[1]
+        text = filter_subel.text
+        if text is None:
+            text = ''
+        if text.strip() == '':
+            xpath += '/' + tag
+        else:
+            xpath += '[' + tag + '=\'' + text + '\']'
+
+    logging.info(xpath)
+
+    return xpath
+    
+def filter_result(rpc, data, filter_or_none, debug=False):
+    """Check for a user filter and prune the result data accordingly.
+    :param rpc: An RPC message element.
+    :param data: The data to filter.
+    :param filter_or_none: Filter element or None.
+    :type filter_or_none: `lxml.Element`
+    """
+
+    if filter_or_none is None:
+        return data
+
+    if ('type' not in filter_or_none.attrib) or (filter_or_none.attrib['type'] == "subtree"):
+        logging.debug("Filtering with subtree")
+        xpf = from_filter_to_xpath(rpc)
+        return util.xpath_filter_result(data, xpf)
+
+    elif filter_or_none.attrib['type'] == "xpath":
+        if 'select' not in filter_or_none.attrib:
+            raise error.MissingAttributeProtoError(rpc, filter_or_none, "select")
+        xpf = filter_or_none.attrib['select']
+
+        logging.debug("Filtering on xpath expression: %s", str(xpf))
+        return util.xpath_filter_result(data, xpf)
+    else:
+        msg = "unexpected type: " + str(filter_or_none.attrib['type'])
+        raise error.BadAttributeProtoError(rpc, filter_or_none, "type", message=msg)
