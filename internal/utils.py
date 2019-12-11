@@ -89,3 +89,70 @@ def get_datastore(rpc):
         exit(1)
 
     return datastore
+    
+    
+def subtree_filter(data,rpc):
+
+    # Aqui estan los distintos componentes de la base de datos
+    for filter_item in rpc.iter(qmap('nc')+'filter'):
+        filter_tree = filter_item
+
+    unprunned_toreturn = data
+    filter_elm = filter_tree
+
+    logging.info(etree.tostring(unprunned_toreturn,pretty_print=True))
+    logging.info(etree.tostring(filter_elm,pretty_print=True))
+
+    def check_content_match(data):
+        response = False
+        for child in data:
+            if not(child.text == '' or child.text is None):
+                response = True
+        return response
+
+    def prune_descendants(data,filter):
+        logging.info("The child " + filter.tag + " is a content match: " + str(check_content_match(filter)))
+        if check_content_match(filter):
+
+            # logging.info("Elements of the content match: ------------------")
+            # logging.info(etree.tostring(data,pretty_print=True))
+            # logging.info(etree.tostring(filter, pretty_print=True))
+
+            #find content match element
+            for child in filter:
+                if not(child.text is '' or child.text is None):
+                    matching_elem = child
+            # logging.info("Looking for the element " + matching_elem.tag + " , " + matching_elem.text)
+
+            # Checking if the current elem matches the seached one
+            if data.find(matching_elem.tag) is not None and data.find(matching_elem.tag).text == matching_elem.text:
+                # logging.info("This element matches")
+                #logging.info(etree.tostring(data,pretty_print=True))
+                #logging.info(etree.tostring(filter, pretty_print=True))
+                if len(list(filter)) > 1:
+                    matching_elem.text = ''
+                    logging.info("Containment nodes inside")
+                    logging.info(etree.tostring(data,pretty_print=True))
+                    logging.info(etree.tostring(filter, pretty_print=True))
+                    prune_descendants(data,filter)
+            else:
+                # logging.info("This element doesnt match")
+                data.getparent().remove(data)
+
+        else:
+            for child in data:
+
+                if len(list(filter)) is not 0:
+                    if filter.find(child.tag) is not None:
+                        logging.info("Element " + child.tag + " found in data, so persisting it")
+                        prune_descendants(child, filter[0])
+
+                    else:
+                        logging.info("Element " + child.tag + " missing in data, deleting it")
+                        data.remove(child)
+
+    prune_descendants(unprunned_toreturn,filter_elm)
+
+    #logging.info(etree.tostring(unprunned_toreturn,pretty_print=True))
+
+    return unprunned_toreturn
