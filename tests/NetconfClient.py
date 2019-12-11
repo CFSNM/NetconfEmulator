@@ -4,11 +4,11 @@ from lxml import etree
 
 def main(*margs):
     parser = ArgumentParser("Netconf Client CLI")
-    parser.add_argument('--host',default='localhost', help='Netconf host')
-    parser.add_argument('--port', type=int, default=8300, help='Netconf server port')
-    parser.add_argument("--username", default="admin", help='Netconf username')
-    parser.add_argument("--password", default="admin", help='Netconf password')
-    parser.add_argument("--rpc", default='get-config', help="RPC to execute (get-config, get, edit-config, available-profiles, activate-profile, commit, discard-changes)")
+    parser.add_argument('--host',default='localhost', help='Netconf agent host')
+    parser.add_argument('--port', type=int, default=8300, help='Netconf agent port')
+    parser.add_argument("--username", default="admin", help='Netconf agent username')
+    parser.add_argument("--password", default="admin", help='Netconf agent password')
+    parser.add_argument("--rpc", default='get-config', help="RPC to execute (get-config, get, edit-config, available-profiles, activate-profile, commit, discard-changes, copy-config, delete-config)")
     parser.add_argument("--datastore", default='running', help="Netconf datastore (running, candidate or startup). Only for get-config, edit-config and delete-config RPCs.")
     parser.add_argument("--new_active_profile", default=None, help="Profile to activate. Only for activate-profile RPC.")
     parser.add_argument("--filter_or_config_file", default=None, help="RPC filter field for get-config and get RPCs or RPC config field for edit-config RPC.")

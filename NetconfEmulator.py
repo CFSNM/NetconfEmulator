@@ -238,7 +238,7 @@ class NetconfEmulator(object):
                 running_config_xml_string = serialise.pybindIETFXMLEncoder.serialise(running_config_b)
                 running_config_xml = etree.fromstring(running_config_xml_string)
 
-                newconfig = uti<ls.process_changes(data_to_insert_xml, running_config_xml)
+                newconfig = utils.process_changes(data_to_insert_xml, running_config_xml)
 
                 collection.delete_one({"_id": datastore_to_insert})
                 newconfig_string = etree.tostring(newconfig)
@@ -251,7 +251,7 @@ class NetconfEmulator(object):
 
         return response
 
-    def rpc_get(self, session, rpc, filter_or_none):  # pylint: disable=W0613
+    def rpc_get(self, session, rpc, filter_or_none):
         logging.info("Received get rpc: "+etree.tostring(rpc, pretty_print=True))
         dbclient = MongoClient()
         response = etree.Element('data', nsmap={None: 'urn:ietf:params:xml:ns:netconf:base:1.0'})
