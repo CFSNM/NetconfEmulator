@@ -3,10 +3,8 @@ setup_files/*.yang
 setup_files/*.txt
 .idea
 .*pyc
-bindings/.*py
-bindings/.*pyc
-setup_files/bindings/.*py
-setup_files/bindings/.*pyc
+bindings
+setup_files/bindings
 
 
 
