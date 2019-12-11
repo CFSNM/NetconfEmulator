@@ -5,6 +5,7 @@ setup_files/*.txt
 .*pyc
 bindings
 setup_files/bindings
+hostkey/id_rsa
 
 
 
