@@ -70,7 +70,6 @@ class NetconfEmulator(object):
         response = etree.Element("ok")
 
         name = rpc[0][0].text
-        logging.info(name)
         bindings_files_folder = getcwd() + "/bindings"
         bindings_folder_list = listdir(bindings_files_folder)
         for bind_file in bindings_folder_list:
@@ -268,7 +267,7 @@ class NetconfEmulator(object):
                 xml_data = etree.XML(xml_data_string)
                 response.insert(1, xml_data)
 
-        toreturn = utils.filter_result(rpc, response, filter_or_none, self.server.debug)
+        toreturn = utils.filter_result(rpc, response, filter_or_none)
 
         return toreturn
 
@@ -290,7 +289,7 @@ class NetconfEmulator(object):
                 xml_data = etree.XML(xml_data_string)
                 response.insert(1, xml_data)
 
-        toreturn = util.filter_results(rpc, response, filter_or_none, self.server.debug)
+        toreturn = utils.filter_results(rpc, response, filter_or_none)
         utils.remove_state(toreturn)
 
         return toreturn

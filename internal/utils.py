@@ -112,11 +112,80 @@ def from_filter_to_xpath(rpc):
         else:
             xpath += '[' + tag + '=\'' + text + '\']'
 
-    logging.info(xpath)
 
     return xpath
-    
-def filter_result(rpc, data, filter_or_none, debug=False):
+
+
+def subtree_filter_result(data, filter_or_none):
+    logging.info("SUBTREE FILTER")
+
+    unprunned_toreturn = data
+    filter_elm = filter_or_none
+
+    logging.info(etree.tostring(filter_elm, pretty_print=True))
+
+    def check_content_match(data):
+        response = False
+        for child in data:
+            if not (child.text == '' or child.text is None):
+                response = True
+        return response
+
+    def prune_descendants(data, filter):
+        logging.info("The child " + filter.tag + " is a content match: " + str(check_content_match(filter)))
+        if check_content_match(filter):
+
+            for child in filter:
+                if not (child.text is '' or child.text is None):
+                    matching_elem = child
+            logging.info("Looking for the element " + matching_elem.tag + " , " + matching_elem.text)
+
+            find_elem = data.find(matching_elem.tag)
+ #           logging.info(etree.tostring(find_elem, pretty_print=True))
+            if find_elem is not None:
+                logging.info("NOT NONE")
+                logging.info(find_elem.text)
+                logging.info(matching_elem.text)
+                if find_elem.text.strip() == matching_elem.text.strip():
+                    logging.info("This element matches")
+#                    logging.info(etree.tostring(data,pretty_print=True))
+#                    logging.info(etree.tostring(filter, pretty_print=True))
+                    logging.info(list(filter))
+                    if len(list(filter)) > 1:
+                        matching_elem.text = ''
+                        logging.info("Containment nodes inside")
+                        logging.info(etree.tostring(data, pretty_print=True))
+                        logging.info(etree.tostring(filter, pretty_print=True))
+                        prune_descendants(data, filter)
+            else:
+                    logging.info("This element doesnt match")
+                    parent = data.getparent()
+                    if parent is not None:
+                        parent.remove(data)
+
+
+        else:
+            for child in data:
+                logging.info("NO CHECK MATCH")
+                logging.info(child)
+
+                logging.info(list(filter))
+
+                if len(list(filter)) is not 0:
+                        if filter.find(child.tag) is not None:
+                            logging.info("Element " + child.tag + " found in data, so persisting it")
+                            prune_descendants(child, filter[0])
+
+                        else:
+                            logging.info("Element " + child.tag + " missing in data, deleting it")
+                            data.remove(child)
+
+    prune_descendants(unprunned_toreturn, filter_elm)
+
+    return unprunned_toreturn
+
+
+def filter_result(rpc, data, filter_or_none):
     """Check for a user filter and prune the result data accordingly.
     :param rpc: An RPC message element.
     :param data: The data to filter.
@@ -129,8 +198,7 @@ def filter_result(rpc, data, filter_or_none, debug=False):
 
     if ('type' not in filter_or_none.attrib) or (filter_or_none.attrib['type'] == "subtree"):
         logging.debug("Filtering with subtree")
-        xpf = from_filter_to_xpath(rpc)
-        return util.xpath_filter_result(data, xpf)
+        return subtree_filter_result(data, filter_or_none)
 
     elif filter_or_none.attrib['type'] == "xpath":
         if 'select' not in filter_or_none.attrib:

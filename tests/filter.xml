@@ -1,8 +1,9 @@
 <filter type="subtree">
-     <components xmlns="http://openconfig.net/yang/platform">
+    <openconfig-platform xmlns="http://openconfig.net/yang/platform">
+     <components >
         <component>
             <name>fan-1/FAN1</name>
-            <subcomponents/>
         </component>
      </components>
+    </openconfig-platform>
 </filter>
