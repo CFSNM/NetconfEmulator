@@ -42,6 +42,8 @@ print("Parsing data from the xml provided")
 with open(cfg, 'r+') as database_reader:
     data = database_reader.read().replace('\n', '')
 
+data = data.replace('xmlns=','xmlns:m=')
+
 database_data = serialise.pybindIETFXMLDecoder.decode(data, binding, module)
 database_string = pybindJSON.dumps(database_data, mode="ietf")
 
